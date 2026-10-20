@@ -2,21 +2,35 @@ import { OrbitControls } from "@react-three/drei"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { Vector3 } from "three"
-import type { AtomModel } from "@/data/filling"
+import type { AtomModel, Letter } from "@/data/filling"
 import type { Focus, ViewMode } from "@/data/story"
-import { cameraGoal } from "@/scene/layout"
+import { CAMERA_FOV, cameraGoal } from "@/scene/layout"
 import { Catalog, Floors, Nested } from "@/scene/views"
+
+const BACKGROUND = "#f5f6f8"
 
 type ControlsLike = {
   target: Vector3
   update: () => void
 }
 
-function CameraRig({ view, focus }: { view: ViewMode; focus: Focus | null }) {
+function CameraRig({
+  view,
+  focus,
+  topShell,
+}: {
+  view: ViewMode
+  focus: Focus | null
+  topShell: number
+}) {
   const camera = useThree((state) => state.camera)
-  const invalidate = useThree((state) => state.invalidate)
+  const gl = useThree((state) => state.gl)
   const controls = useThree((state) => state.controls) as ControlsLike | null
-  const goal = useMemo(() => cameraGoal(view, focus), [view, focus])
+  const aspect = useThree((state) => state.size.width / state.size.height)
+  const goal = useMemo(
+    () => cameraGoal(view, focus, topShell, aspect),
+    [view, focus, topShell, aspect]
+  )
   const desiredPosition = useRef(new Vector3())
   const desiredTarget = useRef(new Vector3())
   const flying = useRef(true)
@@ -24,22 +38,11 @@ function CameraRig({ view, focus }: { view: ViewMode; focus: Focus | null }) {
   useLayoutEffect(() => {
     desiredPosition.current.set(...goal.position)
     desiredTarget.current.set(...goal.target)
-    camera.position.copy(desiredPosition.current)
-    camera.lookAt(desiredTarget.current)
-    if (controls?.target) {
-      controls.target.copy(desiredTarget.current)
-      controls.update()
-    }
     flying.current = true
-    invalidate()
-  }, [camera, controls, desiredPosition, desiredTarget, goal, invalidate])
+  }, [goal])
 
   useEffect(() => {
-    const canvas = document.querySelector("canvas")
-    if (!canvas) {
-      return
-    }
-
+    const canvas = gl.domElement
     const stop = () => {
       flying.current = false
     }
@@ -50,78 +53,80 @@ function CameraRig({ view, focus }: { view: ViewMode; focus: Focus | null }) {
       canvas.removeEventListener("pointerdown", stop)
       canvas.removeEventListener("wheel", stop)
     }
-  }, [])
+  }, [gl])
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!flying.current || !controls) {
       return
     }
 
-    camera.position.lerp(desiredPosition.current, 0.085)
-    controls.target.lerp(desiredTarget.current, 0.085)
+    const t = 1 - Math.exp(-delta * 4.5)
+    camera.position.lerp(desiredPosition.current, t)
+    controls.target.lerp(desiredTarget.current, t)
     controls.update()
 
     if (
-      camera.position.distanceTo(desiredPosition.current) < 0.05 &&
-      controls.target.distanceTo(desiredTarget.current) < 0.05
+      camera.position.distanceTo(desiredPosition.current) < 0.01 &&
+      controls.target.distanceTo(desiredTarget.current) < 0.01
     ) {
       flying.current = false
-      return
     }
-
-    invalidate()
   })
 
   return null
 }
 
-const OPENING = cameraGoal("floors", null)
-
 export function AtomScene({
   model,
   view,
   focus,
-  onFocus,
+  onSelect,
 }: {
   model: AtomModel
   view: ViewMode
   focus: Focus | null
-  onFocus: (focus: Focus | null) => void
+  onSelect: (n: number, letter: Letter) => void
 }) {
+  const topShell = Math.max(
+    1,
+    ...model.shells.filter((shell) => shell.electrons > 0).map((s) => s.n)
+  )
+  const opening = cameraGoal("floors", null, topShell, 1)
+
   return (
     <Canvas
       className="h-full w-full"
-      camera={{ position: OPENING.position, fov: 42 }}
-      frameloop="demand"
+      camera={{ position: opening.position, fov: CAMERA_FOV }}
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: false }}
     >
-      <color attach="background" args={["#0e1218"]} />
-      <fog attach="fog" args={["#0e1218", 24, 46]} />
-      <hemisphereLight args={["#f7f4ee", "#1c2433", 0.55]} />
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[8, 12, 6]} intensity={1.55} />
-      <directionalLight
-        position={[-7, 3, -5]}
-        intensity={0.45}
-        color="#9eb6e0"
-      />
+      <color attach="background" args={[BACKGROUND]} />
+      <fog attach="fog" args={[BACKGROUND, 22, 40]} />
+      <hemisphereLight args={["#ffffff", "#c9d1de", 1.1]} />
+      <ambientLight intensity={0.45} />
+      <directionalLight position={[6, 10, 8]} intensity={1.6} />
+      <directionalLight position={[-7, 3, -5]} intensity={0.4} />
       {view === "floors" ? (
-        <Floors model={model} focus={focus} onFocus={(next) => onFocus(next)} />
+        <Floors
+          model={model}
+          focus={focus}
+          topShell={topShell}
+          onSelect={onSelect}
+        />
       ) : null}
       {view === "nested" ? <Nested model={model} focus={focus} /> : null}
       {view === "catalog" ? (
-        <Catalog focus={focus} onFocus={(next) => onFocus(next)} />
+        <Catalog model={model} focus={focus} onSelect={onSelect} />
       ) : null}
       <OrbitControls
         makeDefault
-        target={OPENING.target}
+        target={opening.target}
         enablePan={false}
-        minDistance={2.2}
-        maxDistance={32}
+        minDistance={2}
+        maxDistance={30}
         maxPolarAngle={Math.PI * 0.92}
       />
-      <CameraRig view={view} focus={focus} />
+      <CameraRig view={view} focus={focus} topShell={topShell} />
     </Canvas>
   )
 }

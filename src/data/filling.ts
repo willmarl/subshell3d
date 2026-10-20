@@ -9,6 +9,20 @@ export const LETTER_COLOR: Record<Letter, string> = {
   f: "#22a35a",
 }
 
+export const LETTER_INK: Record<Letter, string> = {
+  s: "#c92a32",
+  p: "#a8640a",
+  d: "#2a55d6",
+  f: "#14813f",
+}
+
+export const LETTER_TINT: Record<Letter, string> = {
+  s: "#fdecec",
+  p: "#fdf3e1",
+  d: "#e9effe",
+  f: "#e5f6ec",
+}
+
 export const AUFBAU = ["1s", "2s", "2p", "3s", "3p", "4s", "3d", "4p"] as const
 
 const SYMBOLS = [

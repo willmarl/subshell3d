@@ -1,7 +1,9 @@
-import { CanvasTexture } from "three"
+import { useMemo } from "react"
+import { BoxGeometry, CanvasTexture, EdgesGeometry } from "three"
 import {
   LETTERS,
-  LETTER_COLOR,
+  LETTER_INK,
+  LETTER_TINT,
   ORBITALS,
   type AtomModel,
   type Letter,
@@ -11,20 +13,25 @@ import {
   CATALOG_GAP,
   CATALOG_SCALE,
   CATALOG_Y,
-  FLOOR_CENTER_X,
+  FLOOR_DEPTH,
+  FLOOR_LEFT,
   FLOOR_ORBITAL_SCALE,
-  FLOOR_RADIUS,
+  FLOOR_RIGHT,
   FLOOR_Y,
   GROUP_X,
   SHELL_RADIUS,
   orbitalSlot,
+  visibleFloors,
 } from "@/scene/layout"
 import { Orbital } from "@/scene/orbitals"
 
+const INK = "#1c2230"
+const MUTED = "#8a93a3"
+
 const labelTextures = new Map<string, CanvasTexture>()
 
-function labelTexture(text: string, color: string) {
-  const key = `${color}|${text}`
+function labelTexture(text: string, color: string, weight: number) {
+  const key = `${color}|${weight}|${text}`
   const cached = labelTextures.get(key)
   if (cached) {
     return cached
@@ -36,18 +43,23 @@ function labelTexture(text: string, color: string) {
     throw new Error("Could not draw a label")
   }
 
-  const font = "600 36px Inter Variable, sans-serif"
+  const font = `${weight} 64px Inter Variable, sans-serif`
   context.font = font
-  const width = Math.ceil(context.measureText(text).width + 32)
-  canvas.width = Math.max(width, 64)
-  canvas.height = 72
+  const width = Math.ceil(context.measureText(text).width + 40)
+  canvas.width = Math.max(width, 96)
+  canvas.height = 112
   context.font = font
-  context.fillStyle = color
   context.textAlign = "center"
   context.textBaseline = "middle"
+  context.lineJoin = "round"
+  context.lineWidth = 14
+  context.strokeStyle = "rgba(255,255,255,0.92)"
+  context.strokeText(text, canvas.width / 2, canvas.height / 2)
+  context.fillStyle = color
   context.fillText(text, canvas.width / 2, canvas.height / 2)
 
   const texture = new CanvasTexture(canvas)
+  texture.anisotropy = 4
   texture.needsUpdate = true
   labelTextures.set(key, texture)
   return texture
@@ -56,20 +68,22 @@ function labelTexture(text: string, color: string) {
 function Label({
   position,
   children,
-  color = "#d5dbe6",
+  color = INK,
   size = 12,
+  weight = 600,
 }: {
   position: [number, number, number]
   children: string
   color?: string
   size?: number
+  weight?: number
 }) {
-  const texture = labelTexture(children, color)
-  const height = size / 40
+  const texture = labelTexture(children, color, weight)
+  const height = size / 36
   const width = height * (texture.image.width / texture.image.height)
 
   return (
-    <sprite position={position} scale={[width, height, 1]}>
+    <sprite position={position} scale={[width, height, 1]} renderOrder={60}>
       <spriteMaterial
         map={texture}
         transparent
@@ -80,9 +94,9 @@ function Label({
   )
 }
 
-function floorOpacity(electrons: number, emphasized: boolean) {
-  const base = electrons > 0 ? 0.94 : 0.22
-  return emphasized ? base : base * 0.32
+function orbitalOpacity(electrons: number, emphasized: boolean) {
+  const base = electrons > 0 ? 0.95 : 0.28
+  return emphasized ? base : base * 0.3
 }
 
 function SubshellCluster({
@@ -90,54 +104,62 @@ function SubshellCluster({
   n,
   letter,
   focus,
-  onFocus,
+  onSelect,
 }: {
   model: AtomModel
   n: number
   letter: Letter
   focus: Focus | null
-  onFocus: (focus: Focus) => void
+  onSelect: (n: number, letter: Letter) => void
 }) {
   const subshell = model.subshells.find(
     (item) => item.n === n && item.letter === letter
   )
-  const emphasized = isEmphasized(focus, n, letter)
-  const y = FLOOR_Y[n] ?? 0
-
   if (!subshell) {
-    return (
-      <Label
-        position={[GROUP_X[letter], y + 0.45, 0]}
-        color="#8b95a8"
-      >{`no ${n}${letter}`}</Label>
-    )
+    return null
   }
+
+  const emphasized = isEmphasized(focus, n, letter)
+  const active = focus?.n === n && focus.letter === letter
+  const y = FLOOR_Y[n] ?? 0
+  const count = subshell.orbitals.length
+  const padWidth = letter === "f" ? 3.1 : Math.max(1, count * 0.7 + 0.3)
+  const padDepth = letter === "f" ? 1.9 : 1.2
 
   return (
     <group position={[GROUP_X[letter], y, 0]}>
+      {active ? (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+          <planeGeometry args={[padWidth, padDepth]} />
+          <meshBasicMaterial color={LETTER_TINT[letter]} />
+        </mesh>
+      ) : null}
       <Label
-        position={[0, 1.15, 0]}
-        color={emphasized ? LETTER_COLOR[letter] : "#8b95a8"}
-        size={15}
+        position={[0, letter === "f" ? 1.25 : 1.1, 0]}
+        color={emphasized ? LETTER_INK[letter] : MUTED}
+        size={active ? 17 : 13}
       >
-        {`${subshell.id}  ${subshell.electrons}/${subshell.capacity}${letter === "f" ? " · simplified" : ""}`}
+        {`${subshell.id}  ${subshell.electrons}/${subshell.capacity}`}
       </Label>
       {subshell.orbitals.map((orbital, index) => (
-        <group
-          key={orbital.name}
-          position={orbitalSlot(letter, index, subshell.orbitals.length)}
-        >
+        <group key={orbital.name} position={orbitalSlot(letter, index, count)}>
           <Orbital
             letter={letter}
             index={index}
             electrons={orbital.electrons}
-            opacity={floorOpacity(orbital.electrons, emphasized)}
+            opacity={orbitalOpacity(orbital.electrons, emphasized)}
             scale={FLOOR_ORBITAL_SCALE}
+            spin={active}
             interactive
-            onSelect={() => onFocus({ n, letter })}
+            onSelect={() => onSelect(n, letter)}
           />
-          {letter === "p" || letter === "d" ? (
-            <Label position={[0, -0.58, 0]} size={11}>
+          {active && (letter === "p" || letter === "d") ? (
+            <Label
+              position={[0, -0.5, 0.3]}
+              size={8}
+              color={MUTED}
+              weight={500}
+            >
               {orbital.name}
             </Label>
           ) : null}
@@ -150,53 +172,57 @@ function SubshellCluster({
 export function Floors({
   model,
   focus,
-  onFocus,
+  topShell,
+  onSelect,
 }: {
   model: AtomModel
   focus: Focus | null
-  onFocus: (focus: Focus) => void
+  topShell: number
+  onSelect: (n: number, letter: Letter) => void
 }) {
+  const shown = model.shells.slice(0, visibleFloors(topShell))
+
   return (
     <group>
-      {model.shells.map((shell) => {
+      {shown.map((shell) => {
+        const empty = shell.electrons === 0
         const emphasized = focus?.n == null || focus.n === shell.n
         const y = FLOOR_Y[shell.n] ?? 0
+        const right = FLOOR_RIGHT[shell.n] ?? 6
+        const width = right - FLOOR_LEFT
+        const fade = empty ? 0.35 : emphasized ? 1 : 0.55
+
         return (
           <group key={shell.n}>
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-              position={[FLOOR_CENTER_X, y, 0]}
-            >
-              <circleGeometry args={[FLOOR_RADIUS, 80]} />
+            <mesh position={[FLOOR_LEFT + width / 2, y - 0.06, 0]}>
+              <boxGeometry args={[width, 0.12, FLOOR_DEPTH]} />
               <meshStandardMaterial
-                color={emphasized ? "#161d29" : "#10151d"}
-                roughness={1}
-                metalness={0}
-              />
-            </mesh>
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-              position={[FLOOR_CENTER_X, y + 0.015, 0]}
-            >
-              <ringGeometry args={[FLOOR_RADIUS - 0.28, FLOOR_RADIUS, 80]} />
-              <meshBasicMaterial
-                color={emphasized ? "#d5deea" : "#2a3444"}
+                color={emphasized && !empty ? "#ffffff" : "#eef0f4"}
                 transparent
-                opacity={emphasized ? 0.85 : 0.45}
+                opacity={fade}
+                roughness={0.9}
               />
             </mesh>
+            <FloorEdges
+              width={width}
+              y={y}
+              color={focus?.n === shell.n ? INK : "#b9c1ce"}
+              opacity={fade}
+            />
             <Label
-              position={[FLOOR_CENTER_X - FLOOR_RADIUS + 0.15, y + 0.85, 0]}
-              color={emphasized ? "#f2f5f8" : "#8b95a8"}
-              size={18}
+              position={[FLOOR_LEFT - 0.85, y + 0.35, 0]}
+              color={emphasized && !empty ? INK : MUTED}
+              size={17}
             >
               {`Shell ${shell.n}`}
             </Label>
             <Label
-              position={[FLOOR_CENTER_X + FLOOR_RADIUS - 0.15, y + 0.85, 0]}
-              size={16}
+              position={[FLOOR_LEFT - 0.85, y - 0.05, 0]}
+              color={MUTED}
+              size={12}
+              weight={500}
             >
-              {`${shell.electrons} / ${shell.capacity}`}
+              {empty ? "empty" : `${shell.electrons} / ${shell.capacity}`}
             </Label>
             {LETTERS.map((letter) => (
               <SubshellCluster
@@ -205,13 +231,38 @@ export function Floors({
                 n={shell.n}
                 letter={letter}
                 focus={focus}
-                onFocus={onFocus}
+                onSelect={onSelect}
               />
             ))}
           </group>
         )
       })}
     </group>
+  )
+}
+
+function FloorEdges({
+  width,
+  y,
+  color,
+  opacity,
+}: {
+  width: number
+  y: number
+  color: string
+  opacity: number
+}) {
+  const geometry = useMemo(
+    () => new EdgesGeometry(new BoxGeometry(width, 0.12, FLOOR_DEPTH)),
+    [width]
+  )
+  return (
+    <lineSegments
+      geometry={geometry}
+      position={[FLOOR_LEFT + width / 2, y - 0.06, 0]}
+    >
+      <lineBasicMaterial color={color} transparent opacity={opacity} />
+    </lineSegments>
   )
 }
 
@@ -222,12 +273,12 @@ function nestedOpacity(
   emphasized: boolean
 ) {
   if (letter === "s") {
-    const glass = [0, 0.88, 0.36, 0.22, 0.14][n] ?? 0.14
+    const glass = [0, 0.85, 0.32, 0.2, 0.13][n] ?? 0.13
     const base = electrons > 0 ? glass : glass * 0.6
-    return emphasized ? base : base * 0.8
+    return emphasized ? base : base * 0.7
   }
 
-  const base = electrons > 0 ? 0.92 : 0.1
+  const base = electrons > 0 ? 0.92 : 0.12
   return emphasized ? base : base * 0.28
 }
 
@@ -242,9 +293,9 @@ export function Nested({
     <group>
       <mesh renderOrder={50}>
         <sphereGeometry args={[0.09, 24, 18]} />
-        <meshBasicMaterial color="#fff6df" depthTest={false} />
+        <meshBasicMaterial color={INK} depthTest={false} />
       </mesh>
-      <Label position={[0, 0.28, 0]} size={12}>
+      <Label position={[0, 0.3, 0]} size={11} color={MUTED}>
         nucleus
       </Label>
       {model.subshells.map((subshell) => {
@@ -262,9 +313,9 @@ export function Nested({
           <group key={subshell.id}>
             {subshell.letter === "s" ? (
               <Label
-                position={[(SHELL_RADIUS[subshell.n] ?? 1) + 0.25, 0.18, 0]}
-                color={LETTER_COLOR.s}
-                size={14}
+                position={[(SHELL_RADIUS[subshell.n] ?? 1) + 0.3, 0.2, 0]}
+                color={LETTER_INK.s}
+                size={15}
               >
                 {`${subshell.n}s`}
               </Label>
@@ -302,28 +353,42 @@ export function Nested({
 }
 
 export function Catalog({
+  model,
   focus,
-  onFocus,
+  onSelect,
 }: {
+  model: AtomModel
   focus: Focus | null
-  onFocus: (focus: Focus) => void
+  onSelect: (n: number, letter: Letter) => void
 }) {
+  const reading =
+    focus?.n != null && focus.letter != null
+      ? model.subshells.find(
+          (item) => item.n === focus.n && item.letter === focus.letter
+        )
+      : undefined
+
   return (
     <group>
       {LETTERS.map((letter) => {
-        const emphasized = focus?.letter == null || focus.letter === letter
+        const active = focus?.letter === letter
+        const emphasized = focus?.letter == null || active
         const infos = ORBITALS[letter]
         const count = infos.length
         const y = CATALOG_Y[letter]
+        const fromModel = model.notation.find((s) => s.letter === letter)
+        const target = fromModel ?? { n: LETTERS.indexOf(letter) + 1 }
 
         return (
           <group key={letter} position={[0, y, 0]}>
             <Label
-              position={[-4.6, 0.35, 0]}
-              color={LETTER_COLOR[letter]}
-              size={15}
+              position={[0, 1.05, 0]}
+              color={emphasized ? LETTER_INK[letter] : MUTED}
+              size={active ? 17 : 14}
             >
-              {letter === "f" ? "f shape · simplified" : `${letter} shape`}
+              {active && reading
+                ? `${letter} row · ${reading.id} uses ${count === 1 ? "this shape" : `these ${count} shapes`}`
+                : `${letter} row · ${count} shape${count === 1 ? "" : "s"}`}
             </Label>
             {infos.map((info, index) => (
               <group
@@ -333,13 +398,23 @@ export function Catalog({
                 <Orbital
                   letter={letter}
                   index={index}
-                  electrons={0}
-                  opacity={emphasized ? 0.96 : 0.4}
+                  electrons={
+                    active && reading
+                      ? (reading.orbitals[index]?.electrons ?? 0)
+                      : 0
+                  }
+                  opacity={emphasized ? 0.95 : 0.3}
                   scale={CATALOG_SCALE}
+                  spin={active}
                   interactive
-                  onSelect={() => onFocus({ letter })}
+                  onSelect={() => onSelect(target.n, letter)}
                 />
-                <Label position={[0, -0.95, 0]} size={12}>
+                <Label
+                  position={[0, -0.85, 0]}
+                  size={10}
+                  color={MUTED}
+                  weight={500}
+                >
                   {info.catalog}
                 </Label>
               </group>

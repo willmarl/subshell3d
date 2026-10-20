@@ -1,11 +1,21 @@
-import { useMemo } from "react"
+import { useFrame, useThree } from "@react-three/fiber"
+import { useMemo, useRef } from "react"
 import {
+  AddEquation,
+  CircleGeometry,
+  CustomBlending,
   DoubleSide,
   FrontSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  OneMinusDstColorFactor,
   Quaternion,
   SphereGeometry,
   TorusGeometry,
   Vector3,
+  ZeroFactor,
 } from "three"
 import type { Letter } from "@/data/filling"
 
@@ -252,45 +262,214 @@ function LobeMesh({
   )
 }
 
-function ElectronDots({ count }: { count: number }) {
-  if (count <= 0) {
-    return null
+const DOT = new SphereGeometry(0.14, 18, 14)
+const HALO = new CircleGeometry(1, 48)
+const RIPPLE = new TorusGeometry(0.2, 0.028, 8, 28)
+const ALONE: [number, number, number] = [0, 0.3, 0.6]
+const PAIR_RIGHT: [number, number, number] = [0.24, 0.3, 0.58]
+const PAIR_LEFT: [number, number, number] = [-0.24, 0.3, 0.58]
+const ARRIVE_SECONDS = 2.2
+const LEAVE_SECONDS = 0.55
+const ARRIVE_FLASHES = 3
+
+function arrivePresentation(t: number) {
+  const popEnd = 0.16
+  if (t < popEnd) {
+    const u = t / popEnd
+    return { scale: u * u * (3 - 2 * u) * 1.7, flash: u }
   }
 
-  const spots =
-    count === 1
-      ? [
-          {
-            position: [0.05, 0.34, 0.52] as [number, number, number],
-            color: "#f4f8ff",
-          },
-        ]
-      : [
-          {
-            position: [0.24, 0.3, 0.5] as [number, number, number],
-            color: "#f4f8ff",
-          },
-          {
-            position: [-0.24, 0.38, 0.5] as [number, number, number],
-            color: "#5ad7ff",
-          },
-        ]
+  const u = (t - popEnd) / (1 - popEnd)
+  const flash = Math.max(0, Math.sin(u * Math.PI * ARRIVE_FLASHES * 2))
+  const fade = 1 - u
+  return {
+    scale: 1 + flash * 1.15 * (0.45 + fade),
+    flash,
+  }
+}
 
+function leaveScale(t: number) {
+  if (t < 0.22) {
+    return 1 + t * 1.6
+  }
+  return 1.35 * (1 - (t - 0.22) / 0.78)
+}
+
+function ElectronDots({
+  count,
+  color,
+  parentScale,
+}: {
+  count: number
+  color: string
+  parentScale: number
+}) {
   return (
     <group>
-      {spots.map((spot) => (
-        <mesh key={spot.color} position={spot.position} renderOrder={30}>
-          <sphereGeometry args={[0.11, 16, 12]} />
-          <meshStandardMaterial
-            color={spot.color}
-            emissive={spot.color}
-            emissiveIntensity={0.9}
-            roughness={0.3}
-          />
-        </mesh>
-      ))}
+      <ElectronDot
+        show={count >= 1}
+        position={count >= 2 ? PAIR_RIGHT : ALONE}
+        color={color}
+        parentScale={parentScale}
+      />
+      <ElectronDot
+        show={count >= 2}
+        position={PAIR_LEFT}
+        color={color}
+        parentScale={parentScale}
+      />
     </group>
   )
+}
+
+function ElectronDot({
+  show,
+  position,
+  color,
+  parentScale,
+}: {
+  show: boolean
+  position: [number, number, number]
+  color: string
+  parentScale: number
+}) {
+  const holder = useRef<Group>(null)
+  const dot = useRef<Mesh>(null)
+  const halo = useRef<Mesh>(null)
+  const ripple = useRef<Mesh>(null)
+  const material = useRef<MeshStandardMaterial>(null)
+  const haloMaterial = useRef<MeshBasicMaterial>(null)
+  const rippleMaterial = useRef<MeshBasicMaterial>(null)
+  const anchor = useRef(new Vector3(...position))
+  const placed = useRef(false)
+  const progress = useRef(1)
+  const phase = useRef<"arrive" | "leave" | "still">("still")
+  const wasShown = useRef(show)
+  const camera = useThree((state) => state.camera)
+
+  useFrame((_, delta) => {
+    const mesh = dot.current
+    const group = holder.current
+    if (!mesh || !group) {
+      return
+    }
+
+    if (!placed.current) {
+      group.position.copy(anchor.current)
+      placed.current = true
+    }
+
+    anchor.current.set(...position)
+    group.position.lerp(anchor.current, 1 - Math.exp(-delta * 10))
+
+    if (show !== wasShown.current) {
+      wasShown.current = show
+      progress.current = 0
+      phase.current = show ? "arrive" : "leave"
+    }
+
+    const step = Math.min(delta, 1 / 30)
+
+    if (phase.current !== "still") {
+      const duration =
+        phase.current === "arrive" ? ARRIVE_SECONDS : LEAVE_SECONDS
+      progress.current = Math.min(1, progress.current + step / duration)
+      const t = progress.current
+      const arriving = phase.current === "arrive"
+      const presented = arriving ? arrivePresentation(t) : null
+      const scale = presented ? presented.scale : leaveScale(t)
+      const flash = presented ? presented.flash : 0
+      mesh.scale.setScalar(Math.max(0, scale))
+      if (material.current) {
+        const white = arriving ? flash : (1 - t) * 0.8
+        material.current.color.setRGB(
+          0.08 + white * 0.92,
+          0.1 + white * 0.9,
+          0.15 + white * 0.85
+        )
+        material.current.emissiveIntensity = arriving
+          ? flash * 2.4
+          : (1 - t) * 0.6
+        material.current.depthTest = !arriving
+      }
+      const glow = halo.current
+      if (glow && haloMaterial.current) {
+        const worldRadius = arriving ? 0.28 + flash * 0.8 : 0
+        glow.visible = arriving && worldRadius > 0.02
+        glow.quaternion.copy(camera.quaternion)
+        glow.scale.setScalar(worldRadius / Math.max(parentScale, 0.15))
+      }
+      const ring = ripple.current
+      if (ring && rippleMaterial.current) {
+        const showRing = !arriving
+        ring.visible = showRing
+        ring.quaternion.copy(camera.quaternion)
+        ring.scale.setScalar(0.45 + t * 2.2)
+        rippleMaterial.current.opacity = showRing ? (1 - t) * 0.7 : 0
+      }
+      if (t >= 1) {
+        phase.current = "still"
+        mesh.scale.setScalar(show ? 1 : 0)
+        if (material.current) {
+          material.current.color.set("#141a26")
+          material.current.emissiveIntensity = 0
+          material.current.depthTest = true
+        }
+        if (glow) {
+          glow.visible = false
+        }
+        if (ring) {
+          ring.visible = false
+        }
+      }
+      return
+    }
+
+    mesh.scale.setScalar(show ? 1 : 0)
+  })
+
+  return (
+    <group ref={holder}>
+      <mesh ref={halo} geometry={HALO} visible={false} renderOrder={28}>
+        <meshBasicMaterial
+          ref={haloMaterial}
+          color="#ffffff"
+          transparent
+          opacity={1}
+          depthTest={false}
+          depthWrite={false}
+          toneMapped={false}
+          blending={CustomBlending}
+          blendSrc={OneMinusDstColorFactor}
+          blendDst={ZeroFactor}
+          blendEquation={AddEquation}
+        />
+      </mesh>
+      <mesh ref={dot} geometry={DOT} renderOrder={31} scale={show ? 1 : 0}>
+        <meshStandardMaterial
+          ref={material}
+          color="#141a26"
+          emissive="#ffffff"
+          emissiveIntensity={0}
+          roughness={0.35}
+        />
+      </mesh>
+      <mesh ref={ripple} geometry={RIPPLE} visible={false} renderOrder={29}>
+        <meshBasicMaterial
+          ref={rippleMaterial}
+          color={color}
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+function wrapAngle(angle: number) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle))
 }
 
 export function Orbital({
@@ -303,6 +482,7 @@ export function Orbital({
   renderOrder = 0,
   doubleSide = false,
   interactive = false,
+  spin = false,
   onSelect,
 }: {
   letter: Letter
@@ -314,25 +494,46 @@ export function Orbital({
   renderOrder?: number
   doubleSide?: boolean
   interactive?: boolean
+  spin?: boolean
   onSelect?: () => void
 }) {
   const lobes = lobesFor(letter, index)
-  const glow = electrons > 0 ? 0.38 : 0.08
+  const glow = electrons > 0 ? 0.12 : 0
+  const spinner = useRef<Group>(null)
+
+  useFrame((_, delta) => {
+    const group = spinner.current
+    if (!group) {
+      return
+    }
+    if (spin) {
+      group.rotation.y = wrapAngle(group.rotation.y + delta * 0.6)
+    } else if (group.rotation.y !== 0) {
+      const eased = group.rotation.y * Math.exp(-delta * 5)
+      group.rotation.y = Math.abs(eased) < 0.001 ? 0 : eased
+    }
+  })
 
   return (
     <group scale={scale}>
-      {lobes.map((lobe, lobeIndex) => (
-        <LobeMesh
-          key={`${lobe.kind}-${lobeIndex}`}
-          lobe={lobe}
-          opacity={opacity}
-          depthWrite={depthWrite}
-          renderOrder={renderOrder}
-          doubleSide={doubleSide}
-          glow={glow}
-        />
-      ))}
-      <ElectronDots count={electrons} />
+      <group ref={spinner}>
+        {lobes.map((lobe, lobeIndex) => (
+          <LobeMesh
+            key={`${lobe.kind}-${lobeIndex}`}
+            lobe={lobe}
+            opacity={opacity}
+            depthWrite={depthWrite}
+            renderOrder={renderOrder}
+            doubleSide={doubleSide}
+            glow={glow}
+          />
+        ))}
+      </group>
+      <ElectronDots
+        count={electrons}
+        color={tone(letter, 0)}
+        parentScale={scale}
+      />
       {interactive ? (
         <mesh
           renderOrder={40}
