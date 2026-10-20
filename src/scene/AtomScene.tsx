@@ -5,6 +5,7 @@ import { Vector3 } from "three"
 import type { AtomModel, Letter } from "@/data/filling"
 import type { Focus, ViewMode } from "@/data/story"
 import { CAMERA_FOV, cameraGoal } from "@/scene/layout"
+import { InvertPass } from "@/scene/InvertPass"
 import { Catalog, Floors, Nested } from "@/scene/views"
 
 const BACKGROUND = "#f5f6f8"
@@ -127,6 +128,7 @@ export function AtomScene({
         maxPolarAngle={Math.PI * 0.92}
       />
       <CameraRig view={view} focus={focus} topShell={topShell} />
+      <InvertPass />
     </Canvas>
   )
 }

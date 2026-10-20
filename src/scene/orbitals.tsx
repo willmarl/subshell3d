@@ -13,6 +13,7 @@ import {
   Vector3,
 } from "three"
 import type { Letter } from "@/data/filling"
+import { pushInvertFlash } from "@/scene/InvertPass"
 
 const SPHERE = new SphereGeometry(1, 28, 20)
 const TORUS = new TorusGeometry(0.44, 0.11, 14, 32)
@@ -258,14 +259,14 @@ function LobeMesh({
 }
 
 const DOT = new SphereGeometry(0.14, 18, 14)
-const HALO = new SphereGeometry(0.42, 18, 14)
+const INVERT_RADIUS = 1.05
 const RIPPLE = new TorusGeometry(0.2, 0.028, 8, 28)
 const ALONE: [number, number, number] = [0, 0.3, 0.6]
 const PAIR_RIGHT: [number, number, number] = [0.24, 0.3, 0.58]
 const PAIR_LEFT: [number, number, number] = [-0.24, 0.3, 0.58]
-const ARRIVE_SECONDS = 2.2
+const ARRIVE_SECONDS = 1.1
 const LEAVE_SECONDS = 0.55
-const ARRIVE_FLASHES = 3
+const ARRIVE_FLASHES = 1
 
 function arrivePresentation(t: number) {
   const popEnd = 0.16
@@ -277,7 +278,7 @@ function arrivePresentation(t: number) {
   const u = (t - popEnd) / (1 - popEnd)
   const flash = Math.max(0, Math.sin(u * Math.PI * ARRIVE_FLASHES * 2))
   return {
-    scale: 1 + flash * 0.9,
+    scale: 1 + flash * 0.35,
     flash,
   }
 }
@@ -314,11 +315,11 @@ function ElectronDot({
   const holder = useRef<Group>(null)
   const dot = useRef<Mesh>(null)
   const ripple = useRef<Mesh>(null)
-  const halo = useRef<Mesh>(null)
   const material = useRef<MeshStandardMaterial>(null)
-  const haloMaterial = useRef<MeshBasicMaterial>(null)
   const rippleMaterial = useRef<MeshBasicMaterial>(null)
   const anchor = useRef(new Vector3(...position))
+  const worldCenter = useRef(new Vector3())
+  const worldScale = useRef(new Vector3())
   const placed = useRef(false)
   const progress = useRef(1)
   const phase = useRef<"arrive" | "leave" | "still">("still")
@@ -358,26 +359,26 @@ function ElectronDot({
       const scale = presented ? presented.scale : leaveScale(t)
       const flash = presented ? presented.flash : 0
       mesh.scale.setScalar(Math.max(0, scale))
-      if (material.current) {
-        const white = arriving ? flash : (1 - t) * 0.8
+      if (material.current && !arriving) {
+        const white = (1 - t) * 0.8
         material.current.color.setRGB(white, white, white)
-        material.current.emissiveIntensity = arriving
-          ? flash * 1.6
-          : (1 - t) * 0.6
+        material.current.emissiveIntensity = (1 - t) * 0.6
       }
-      const glow = halo.current
-      if (glow && haloMaterial.current) {
-        glow.visible = arriving && flash > 0.05
-        glow.scale.setScalar(1 + flash * 1.35)
-        haloMaterial.current.opacity = flash * 0.85
+      if (arriving) {
+        group.getWorldPosition(worldCenter.current)
+        group.getWorldScale(worldScale.current)
+        pushInvertFlash(
+          worldCenter.current,
+          INVERT_RADIUS * worldScale.current.x * (0.6 + 0.4 * flash),
+          Math.min(1, flash * 3)
+        )
       }
       const ring = ripple.current
       if (ring && rippleMaterial.current) {
-        ring.visible = true
+        ring.visible = !arriving
         ring.quaternion.copy(camera.quaternion)
-        const cycle = arriving ? (t * ARRIVE_FLASHES) % 1 : t
-        ring.scale.setScalar(0.6 + cycle * 2.4)
-        rippleMaterial.current.opacity = (1 - cycle) * (arriving ? 0.9 : 0.7)
+        ring.scale.setScalar(0.6 + t * 2.4)
+        rippleMaterial.current.opacity = (1 - t) * 0.7
       }
       if (t >= 1) {
         phase.current = "still"
@@ -385,9 +386,6 @@ function ElectronDot({
         if (material.current) {
           material.current.color.set("#141a26")
           material.current.emissiveIntensity = 0
-        }
-        if (glow) {
-          glow.visible = false
         }
         if (ring) {
           ring.visible = false
@@ -401,17 +399,6 @@ function ElectronDot({
 
   return (
     <group ref={holder}>
-      <mesh ref={halo} geometry={HALO} visible={false} renderOrder={28}>
-        <meshBasicMaterial
-          ref={haloMaterial}
-          color="#ffe14a"
-          transparent
-          opacity={0}
-          depthTest={false}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
       <mesh ref={dot} geometry={DOT} renderOrder={31} scale={show ? 1 : 0}>
         <meshStandardMaterial
           ref={material}
