@@ -1,21 +1,12 @@
-# React + TypeScript + Vite + shadcn/ui
+# Subshells in 3D
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+I made this because a picture of orbital shapes had me reading `1s² 2s² 2p²` wrong. The rows looked like shells, so the yellow dumbbells seemed to be shell 2, and `2s²` had nowhere to go. The rows are shapes, not shells. Shell 2 is a sphere and those dumbbells together.
 
-## Adding components
-
-To add components to your app, run the following command:
+A static page for reading electron configurations like `1s² 2s² 2p²`. The number is the shell, the letter is the shape, and the superscript is the electron count.
 
 ```bash
-npx shadcn@latest add button
+pnpm dev
+pnpm build
 ```
 
-This will place the ui components in the `src/components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button"
-```
+`dist/` is frontend-only and can be published to GitHub Pages. Pushing to `main` runs that deploy.
