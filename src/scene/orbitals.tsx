@@ -1,21 +1,16 @@
 import { useFrame, useThree } from "@react-three/fiber"
 import { useMemo, useRef } from "react"
 import {
-  AddEquation,
-  CircleGeometry,
-  CustomBlending,
   DoubleSide,
   FrontSide,
   Group,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  OneMinusDstColorFactor,
   Quaternion,
   SphereGeometry,
   TorusGeometry,
   Vector3,
-  ZeroFactor,
 } from "three"
 import type { Letter } from "@/data/filling"
 
@@ -263,7 +258,7 @@ function LobeMesh({
 }
 
 const DOT = new SphereGeometry(0.14, 18, 14)
-const HALO = new CircleGeometry(1, 48)
+const HALO = new SphereGeometry(0.42, 18, 14)
 const RIPPLE = new TorusGeometry(0.2, 0.028, 8, 28)
 const ALONE: [number, number, number] = [0, 0.3, 0.6]
 const PAIR_RIGHT: [number, number, number] = [0.24, 0.3, 0.58]
@@ -281,9 +276,8 @@ function arrivePresentation(t: number) {
 
   const u = (t - popEnd) / (1 - popEnd)
   const flash = Math.max(0, Math.sin(u * Math.PI * ARRIVE_FLASHES * 2))
-  const fade = 1 - u
   return {
-    scale: 1 + flash * 1.15 * (0.45 + fade),
+    scale: 1 + flash * 0.9,
     flash,
   }
 }
@@ -295,29 +289,15 @@ function leaveScale(t: number) {
   return 1.35 * (1 - (t - 0.22) / 0.78)
 }
 
-function ElectronDots({
-  count,
-  color,
-  parentScale,
-}: {
-  count: number
-  color: string
-  parentScale: number
-}) {
+function ElectronDots({ count, color }: { count: number; color: string }) {
   return (
     <group>
       <ElectronDot
         show={count >= 1}
         position={count >= 2 ? PAIR_RIGHT : ALONE}
         color={color}
-        parentScale={parentScale}
       />
-      <ElectronDot
-        show={count >= 2}
-        position={PAIR_LEFT}
-        color={color}
-        parentScale={parentScale}
-      />
+      <ElectronDot show={count >= 2} position={PAIR_LEFT} color={color} />
     </group>
   )
 }
@@ -326,17 +306,15 @@ function ElectronDot({
   show,
   position,
   color,
-  parentScale,
 }: {
   show: boolean
   position: [number, number, number]
   color: string
-  parentScale: number
 }) {
   const holder = useRef<Group>(null)
   const dot = useRef<Mesh>(null)
-  const halo = useRef<Mesh>(null)
   const ripple = useRef<Mesh>(null)
+  const halo = useRef<Mesh>(null)
   const material = useRef<MeshStandardMaterial>(null)
   const haloMaterial = useRef<MeshBasicMaterial>(null)
   const rippleMaterial = useRef<MeshBasicMaterial>(null)
@@ -382,30 +360,24 @@ function ElectronDot({
       mesh.scale.setScalar(Math.max(0, scale))
       if (material.current) {
         const white = arriving ? flash : (1 - t) * 0.8
-        material.current.color.setRGB(
-          0.08 + white * 0.92,
-          0.1 + white * 0.9,
-          0.15 + white * 0.85
-        )
+        material.current.color.setRGB(white, white, white)
         material.current.emissiveIntensity = arriving
-          ? flash * 2.4
+          ? flash * 1.6
           : (1 - t) * 0.6
-        material.current.depthTest = !arriving
       }
       const glow = halo.current
       if (glow && haloMaterial.current) {
-        const worldRadius = arriving ? 0.28 + flash * 0.8 : 0
-        glow.visible = arriving && worldRadius > 0.02
-        glow.quaternion.copy(camera.quaternion)
-        glow.scale.setScalar(worldRadius / Math.max(parentScale, 0.15))
+        glow.visible = arriving && flash > 0.05
+        glow.scale.setScalar(1 + flash * 1.35)
+        haloMaterial.current.opacity = flash * 0.85
       }
       const ring = ripple.current
       if (ring && rippleMaterial.current) {
-        const showRing = !arriving
-        ring.visible = showRing
+        ring.visible = true
         ring.quaternion.copy(camera.quaternion)
-        ring.scale.setScalar(0.45 + t * 2.2)
-        rippleMaterial.current.opacity = showRing ? (1 - t) * 0.7 : 0
+        const cycle = arriving ? (t * ARRIVE_FLASHES) % 1 : t
+        ring.scale.setScalar(0.6 + cycle * 2.4)
+        rippleMaterial.current.opacity = (1 - cycle) * (arriving ? 0.9 : 0.7)
       }
       if (t >= 1) {
         phase.current = "still"
@@ -413,7 +385,6 @@ function ElectronDot({
         if (material.current) {
           material.current.color.set("#141a26")
           material.current.emissiveIntensity = 0
-          material.current.depthTest = true
         }
         if (glow) {
           glow.visible = false
@@ -433,16 +404,12 @@ function ElectronDot({
       <mesh ref={halo} geometry={HALO} visible={false} renderOrder={28}>
         <meshBasicMaterial
           ref={haloMaterial}
-          color="#ffffff"
+          color="#ffe14a"
           transparent
-          opacity={1}
+          opacity={0}
           depthTest={false}
           depthWrite={false}
           toneMapped={false}
-          blending={CustomBlending}
-          blendSrc={OneMinusDstColorFactor}
-          blendDst={ZeroFactor}
-          blendEquation={AddEquation}
         />
       </mesh>
       <mesh ref={dot} geometry={DOT} renderOrder={31} scale={show ? 1 : 0}>
@@ -529,11 +496,7 @@ export function Orbital({
           />
         ))}
       </group>
-      <ElectronDots
-        count={electrons}
-        color={tone(letter, 0)}
-        parentScale={scale}
-      />
+      <ElectronDots count={electrons} color={tone(letter, 0)} />
       {interactive ? (
         <mesh
           renderOrder={40}
