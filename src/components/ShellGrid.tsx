@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react"
 import {
   LETTERS,
   LETTER_INK,
@@ -7,7 +8,7 @@ import {
   type Letter,
   type SubshellFill,
 } from "@/data/filling"
-import { isEmphasized, type Focus } from "@/data/story"
+import { isEmphasized, lockedSet, type Focus } from "@/data/story"
 
 export function OrbitalBoxes({
   subshell,
@@ -118,6 +119,7 @@ function ShellRow({
 
         const active = focus?.n === n && focus.letter === letter
         const dim = focus != null && !isEmphasized(focus, n, letter)
+        const locked = lockedSet(model.z, n, letter) != null
         return (
           <button
             key={letter}
@@ -139,7 +141,18 @@ function ShellRow({
               {subshell.id}
               {subshell.electrons > 0 ? superscript(subshell.electrons) : ""}
             </span>
-            <OrbitalBoxes subshell={subshell} />
+            <span className="relative">
+              <span className={locked ? "opacity-40" : undefined}>
+                <OrbitalBoxes subshell={subshell} />
+              </span>
+              {locked ? (
+                <Lock
+                  className="absolute top-1/2 left-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2"
+                  style={{ color: LETTER_INK[letter] }}
+                  aria-label="Locked"
+                />
+              ) : null}
+            </span>
           </button>
         )
       })}

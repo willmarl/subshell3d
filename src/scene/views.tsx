@@ -1,5 +1,13 @@
-import { useMemo } from "react"
-import { BoxGeometry, CanvasTexture, EdgesGeometry } from "three"
+import { useFrame, useThree } from "@react-three/fiber"
+import { useMemo, useRef } from "react"
+import {
+  BoxGeometry,
+  CanvasTexture,
+  CylinderGeometry,
+  EdgesGeometry,
+  Group,
+  TorusGeometry,
+} from "three"
 import {
   LETTERS,
   LETTER_INK,
@@ -8,7 +16,7 @@ import {
   type AtomModel,
   type Letter,
 } from "@/data/filling"
-import { isEmphasized, type Focus } from "@/data/story"
+import { isEmphasized, lockedSet, type Focus } from "@/data/story"
 import {
   CATALOG_GAP,
   CATALOG_SCALE,
@@ -27,6 +35,63 @@ import { Orbital } from "@/scene/orbitals"
 
 const INK = "#1c2230"
 const MUTED = "#8a93a3"
+const LOCK_BODY = new BoxGeometry(0.4, 0.3, 0.16)
+const LOCK_SHACKLE = new TorusGeometry(0.15, 0.045, 8, 18, Math.PI)
+const LOCK_KEYHOLE = new CylinderGeometry(0.045, 0.045, 0.02, 12)
+
+function Padlock() {
+  const group = useRef<Group>(null)
+  const camera = useThree((state) => state.camera)
+
+  useFrame(() => {
+    group.current?.quaternion.copy(camera.quaternion)
+  })
+
+  return (
+    <group ref={group} position={[0, 0.48, 0]}>
+      <group position={[0, 0, 0.85]} scale={1.2}>
+        <mesh geometry={LOCK_SHACKLE} position={[0, 0.15, 0]} renderOrder={40}>
+          <meshStandardMaterial
+            color="#3e4651"
+            metalness={0.7}
+            roughness={0.3}
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh geometry={LOCK_BODY} renderOrder={41}>
+          <meshStandardMaterial
+            color="#e6b325"
+            metalness={0.55}
+            roughness={0.35}
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh
+          geometry={LOCK_KEYHOLE}
+          position={[0, -0.02, 0.09]}
+          rotation={[Math.PI / 2, 0, 0]}
+          renderOrder={42}
+        >
+          <meshStandardMaterial
+            color="#2c3138"
+            metalness={0.4}
+            roughness={0.45}
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+          />
+        </mesh>
+      </group>
+    </group>
+  )
+}
 
 const labelTextures = new Map<string, CanvasTexture>()
 
@@ -121,6 +186,7 @@ function SubshellCluster({
 
   const emphasized = isEmphasized(focus, n, letter)
   const active = focus?.n === n && focus.letter === letter
+  const locked = lockedSet(model.z, n, letter) != null
   const y = FLOOR_Y[n] ?? 0
   const count = subshell.orbitals.length
   const padWidth = letter === "f" ? 3.1 : Math.max(1, count * 0.7 + 0.3)
@@ -165,6 +231,7 @@ function SubshellCluster({
           ) : null}
         </group>
       ))}
+      {locked ? <Padlock /> : null}
     </group>
   )
 }
@@ -273,7 +340,7 @@ function nestedOpacity(
   emphasized: boolean
 ) {
   if (letter === "s") {
-    const glass = [0, 0.85, 0.32, 0.2, 0.13][n] ?? 0.13
+    const glass = [0, 0.85, 0.32, 0.2, 0.13, 0.1, 0.08][n] ?? 0.08
     const base = electrons > 0 ? glass : glass * 0.6
     return emphasized ? base : base * 0.7
   }

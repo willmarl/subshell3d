@@ -1,5 +1,5 @@
 import { LETTER_INK, ORBITALS, type AtomModel } from "@/data/filling"
-import type { Focus, ViewMode } from "@/data/story"
+import { lockedSet, type Focus, type ViewMode } from "@/data/story"
 
 function captionFor(model: AtomModel, view: ViewMode, focus: Focus | null) {
   const subshell =
@@ -43,6 +43,10 @@ function captionFor(model: AtomModel, view: ViewMode, focus: Focus | null) {
   }
 
   if (subshell) {
+    const lock = lockedSet(model.z, subshell.n, subshell.letter)
+    if (lock) {
+      return lock
+    }
     const count = subshell.orbitals.length
     return `Floor ${subshell.n} is shell ${subshell.n}. Its ${count} ${subshell.letter} blob${count === 1 ? "" : "s"} hold ${subshell.electrons} of ${subshell.capacity} electrons.`
   }

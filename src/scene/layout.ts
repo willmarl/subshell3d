@@ -1,9 +1,9 @@
-import type { Letter } from "@/data/filling"
+import { MAX_SHELL, type Letter } from "@/data/filling"
 import type { Focus, ViewMode } from "@/data/story"
 
 type Vec3 = [number, number, number]
 
-export const FLOOR_Y = [0, 0, 2.3, 4.6, 6.9]
+export const FLOOR_Y = [0, 0, 2.3, 4.6, 6.9, 9.2, 11.5]
 
 export const GROUP_X: Record<Letter, number> = {
   s: -3.2,
@@ -13,7 +13,7 @@ export const GROUP_X: Record<Letter, number> = {
 }
 
 export const FLOOR_LEFT = -4.1
-export const FLOOR_RIGHT = [0, -2.35, -0.55, 3.15, 6.15]
+export const FLOOR_RIGHT = [0, -2.35, -0.55, 3.15, 6.15, 6.15, 6.15]
 export const FLOOR_DEPTH = 2.6
 export const ORBITAL_GAP = 0.7
 export const FLOOR_ORBITAL_SCALE = 0.36
@@ -28,10 +28,10 @@ export const CATALOG_Y: Record<Letter, number> = {
 export const CATALOG_SCALE = 0.58
 export const CATALOG_GAP = 1.38
 
-export const SHELL_RADIUS = [0, 0.72, 1.5, 2.35, 3.25]
+export const SHELL_RADIUS = [0, 0.72, 1.5, 2.35, 3.25, 4.2, 5.2]
 
 export function visibleFloors(topShell: number) {
-  return Math.min(4, Math.max(1, topShell) + 1)
+  return Math.min(MAX_SHELL, Math.max(1, topShell) + 1)
 }
 
 export function orbitalSlot(

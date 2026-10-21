@@ -11,7 +11,7 @@ import {
   StepBody,
   StepNav,
 } from "@/components/Reader"
-import { buildAtom, type Letter } from "@/data/filling"
+import { MAX_Z, buildAtom, type Letter } from "@/data/filling"
 import {
   buildPractice,
   explainPlace,
@@ -79,7 +79,7 @@ export default function App() {
       : step.chunk) ?? null
 
   function setZ(next: number, followNewest = false) {
-    const clamped = Math.min(36, Math.max(1, next))
+    const clamped = Math.min(MAX_Z, Math.max(1, next))
     setZRaw(clamped)
     setPicked(null)
     if (followNewest) {
@@ -177,7 +177,7 @@ export default function App() {
       return
     }
     setPlaying(false)
-    setBuildTarget(z <= 1 ? 36 : z)
+    setBuildTarget(z <= 1 ? MAX_Z : z)
     setZ(1)
   }
 

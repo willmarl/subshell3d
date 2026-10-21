@@ -1,6 +1,7 @@
 import {
   LETTERS,
   ORBITALS,
+  exceptionFor,
   superscript,
   type AtomModel,
   type Letter,
@@ -69,10 +70,27 @@ export function buildGuide(model: AtomModel): GuideStep[] {
   ]
 }
 
+export function lockedSet(z: number, n: number, letter: Letter) {
+  if (n === 3 && letter === "d" && z >= 11 && z <= 19) {
+    return "Locked until calcium. The blue seats on floor 3 open once 4s is full."
+  }
+  if (n === 4 && letter === "d" && z >= 29 && z <= 37) {
+    return "Locked until strontium. The blue seats on floor 4 open once 5s is full."
+  }
+  if (n === 4 && letter === "f" && z >= 29 && z <= 56) {
+    return "Locked until lanthanum. The green seats on floor 4 open once 6s is full."
+  }
+  return null
+}
+
 export function chunkNotes(model: AtomModel, subshell: SubshellFill) {
   const { n, letter, electrons, capacity } = subshell
   const blobs = ORBITALS[letter].length
   const notes: string[] = []
+  const lock = lockedSet(model.z, n, letter)
+  if (lock) {
+    notes.push(lock)
+  }
 
   if (letter === "s" && n === 1) {
     notes.push("Shell 1 only has an s. There is no 1p, 1d or 1f.")
@@ -113,7 +131,35 @@ export function chunkNotes(model: AtomModel, subshell: SubshellFill) {
       "3d is on floor 3, but it only starts filling after 4s. That's why it comes after 4s in the notation."
     )
   }
-  if (model.exception && (subshell.id === "4s" || subshell.id === "3d")) {
+  if (subshell.id === "5s" && electrons > 0) {
+    notes.push(
+      "5s fills right after krypton, before the blue 4d seats and long before the green 4f seats."
+    )
+  }
+  if (subshell.id === "4d" && electrons > 0) {
+    notes.push(
+      "Blue on floor 4 fills after 5s and before 5p. Green 4f stays empty through this whole stretch, including element 46."
+    )
+  }
+  if (subshell.id === "4f" && electrons === 0 && model.z >= 37 && !lock) {
+    notes.push(
+      "Green stays empty here. It does not fill at 46. That element is filling blue 4d. Green starts at cerium, 58, after 6s."
+    )
+  }
+  if (subshell.id === "4f" && electrons > 0) {
+    notes.push(
+      "Green on floor 4 fills after 6s. Floor 5's red and orange are already full by then. Its blue seats, 5d, come after green."
+    )
+  }
+  if (subshell.id === "6s" && electrons > 0) {
+    notes.push(
+      "6s fills before 4f. The red seat on floor 6 is cheaper than the green seats on floor 4."
+    )
+  }
+  if (subshell.id === "5d" && electrons > 0 && model.z >= 71) {
+    notes.push("Blue on floor 5 fills after the green 4f set is full.")
+  }
+  if (model.exception && exceptionFor(model.z)?.counts[subshell.id] != null) {
     notes.push(model.exception)
   }
 

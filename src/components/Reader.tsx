@@ -4,6 +4,7 @@ import {
   LETTERS,
   LETTER_INK,
   LETTER_TINT,
+  MAX_Z,
   ORBITALS,
   superscript,
   type AtomModel,
@@ -31,6 +32,13 @@ const JUMPS: { z: number; label: string }[] = [
   { z: 26, label: "Fe" },
   { z: 29, label: "Cu" },
   { z: 36, label: "Kr" },
+  { z: 38, label: "Sr" },
+  { z: 46, label: "Pd" },
+  { z: 54, label: "Xe" },
+  { z: 56, label: "Ba" },
+  { z: 58, label: "Ce" },
+  { z: 71, label: "Lu" },
+  { z: 86, label: "Rn" },
 ]
 
 export function ElementBar({
@@ -69,7 +77,7 @@ export function ElementBar({
           type="button"
           className="grid size-9 place-items-center rounded-full border border-[#d6dbe4] bg-white text-[#3b4252] hover:bg-[#f1f3f7] disabled:opacity-40"
           aria-label="One more electron"
-          disabled={model.z >= 36}
+          disabled={model.z >= MAX_Z}
           onClick={() => onZ(model.z + 1)}
         >
           <ChevronRight className="size-5" />
@@ -79,7 +87,7 @@ export function ElementBar({
         className="w-full accent-[#1c2230]"
         type="range"
         min={1}
-        max={36}
+        max={MAX_Z}
         value={model.z}
         aria-label="Atomic number"
         onChange={(event) => onZ(Number(event.target.value))}
@@ -113,6 +121,11 @@ export function ElementBar({
           {building ? "Stop" : "Fill from H"}
         </button>
       </div>
+      {model.exception ? (
+        <p className="text-sm leading-relaxed text-[#8a5a00]">
+          {model.exception}
+        </p>
+      ) : null}
     </section>
   )
 }
@@ -433,7 +446,7 @@ function Decoder({
         </span>
         <PartLabel
           title={`shell ${n}`}
-          detail={`floor ${n}, holds ${2 * n * n}`}
+          detail={`floor ${n}, holds ${model.shells.find((item) => item.n === n)?.capacity ?? 0}`}
         />
         <PartLabel
           title={`${letter} shape`}
@@ -570,8 +583,9 @@ export function BuildingPlan({
       </div>
       <ShellGrid model={model} focus={focus} onSelect={onSelect} />
       <p className="text-xs text-[#6b7385]">
-        Shell n has n letters:{" "}
-        {[1, 2, 3, 4].map((n) => shellParts(n).join(" ")).join(" · ")}
+        Through shell 4 each floor adds a letter:{" "}
+        {[1, 2, 3, 4].map((n) => shellParts(n).join(" ")).join(" · ")}. Shells 5
+        and 6 reuse those four. The next letter, g, stays empty through radon.
       </p>
     </section>
   )
