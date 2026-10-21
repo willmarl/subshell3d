@@ -78,11 +78,13 @@ export default function App() {
         )
       : step.chunk) ?? null
 
-  function setZ(next: number) {
+  function setZ(next: number, followNewest = false) {
     const clamped = Math.min(36, Math.max(1, next))
     setZRaw(clamped)
     setPicked(null)
-    setStepKey(newestChunkKey(clamped))
+    if (followNewest) {
+      setStepKey(newestChunkKey(clamped))
+    }
     setPracticeKey(null)
     setVerdict(null)
     if (view === "catalog" && step.kind === "chart") {
@@ -143,7 +145,7 @@ export default function App() {
         setBuildTarget(null)
         return
       }
-      setZ(z + 1)
+      setZ(z + 1, true)
     }, BUILD_MS)
     return () => window.clearTimeout(timer)
   })
