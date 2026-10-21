@@ -132,6 +132,13 @@ export function NotationStrip({
     (subshell) => subshell.n === focus?.n && subshell.letter === focus.letter
   )
   const reading = step.kind === "chunk"
+  function chunkActive(n: number, letter: Letter) {
+    return (
+      focus?.n != null &&
+      focus.n === n &&
+      (focus.letter == null || focus.letter === letter)
+    )
+  }
 
   return (
     <div
@@ -139,7 +146,7 @@ export function NotationStrip({
       aria-label="Electron configuration"
     >
       {model.notation.map((subshell, index) => {
-        const active = index === activeIndex
+        const active = chunkActive(subshell.n, subshell.letter)
         const ahead = reading && activeIndex >= 0 && index > activeIndex
         return (
           <span key={subshell.id} className="flex items-baseline">
@@ -544,10 +551,12 @@ export function BuildingPlan({
   model,
   focus,
   onSelect,
+  hint,
 }: {
   model: AtomModel
   focus: Focus | null
   onSelect: (n: number, letter: Letter) => void
+  hint?: string
 }) {
   return (
     <section className="flex flex-col gap-2">
@@ -556,7 +565,7 @@ export function BuildingPlan({
           Every shell at once
         </h2>
         <span className="text-xs text-[#6b7385]">
-          rows = big number · columns = letter
+          {hint ?? "rows = big number · columns = letter"}
         </span>
       </div>
       <ShellGrid model={model} focus={focus} onSelect={onSelect} />

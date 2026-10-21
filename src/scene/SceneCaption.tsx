@@ -35,6 +35,13 @@ function captionFor(model: AtomModel, view: ViewMode, focus: Focus | null) {
     return "Shells really sit around each other. 2s wraps 1s, 3s wraps 2s, and the other shapes sit inside."
   }
 
+  if (focus?.n != null && focus.letter == null) {
+    const shell = model.shells.find((item) => item.n === focus.n)
+    if (shell) {
+      return `Floor ${shell.n} is shell ${shell.n}. Its ${shell.capacity} seats come from its own subshells, and ${shell.electrons} of them are filled.`
+    }
+  }
+
   if (subshell) {
     const count = subshell.orbitals.length
     return `Floor ${subshell.n} is shell ${subshell.n}. Its ${count} ${subshell.letter} blob${count === 1 ? "" : "s"} hold ${subshell.electrons} of ${subshell.capacity} electrons.`
